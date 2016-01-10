@@ -22,26 +22,39 @@ import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.StaggeredGridLayoutManager;
 
+import com.jakewharton.rxbinding.support.v7.widget.RecyclerViewScrollEvent;
 import com.jakewharton.rxbinding.support.v7.widget.RxRecyclerView;
 
 import rx.Observable;
+import rx.functions.Func1;
 
 public class RxEndlessRecyclerView {
 
+    /**
+     * 已经滑动到最后一条
+     * @param view
+     * @return
+     */
     public static Observable<Integer> reachesEnd(RecyclerView view) {
         return RxRecyclerView.scrollEvents(view)
                 .filter(i -> view.getLayoutManager() != null)
-                .concatMap(event -> {
-                    RecyclerView.LayoutManager layoutManager = view.getLayoutManager();
-                    if (layoutManager instanceof LinearLayoutManager) { // also GridLayoutManager
-                        return lastVisibleItemPosition((LinearLayoutManager) layoutManager);
-                    } else if (layoutManager instanceof StaggeredGridLayoutManager) {
-                        return lastVisibleItemPositions((StaggeredGridLayoutManager) layoutManager);
-                    } else {
-                        return Observable.empty();
+                .concatMap(new Func1<RecyclerViewScrollEvent, Observable<? extends Integer>>() {
+                    @Override public Observable<? extends Integer> call(RecyclerViewScrollEvent event) {
+                        RecyclerView.LayoutManager layoutManager = view.getLayoutManager();
+                        if (layoutManager instanceof LinearLayoutManager) { // also GridLayoutManager
+                            return lastVisibleItemPosition((LinearLayoutManager) layoutManager);
+                        } else if (layoutManager instanceof StaggeredGridLayoutManager) {
+                            return lastVisibleItemPositions((StaggeredGridLayoutManager) layoutManager);
+                        } else {
+                            return Observable.empty();
+                        }
                     }
                 })
-                .filter(i -> i >= view.getLayoutManager().getItemCount() - 1)
+                .filter(new Func1<Integer, Boolean>() {
+                    @Override public Boolean call(Integer i) {
+                        return i >= view.getLayoutManager().getItemCount() - 1;
+                    }
+                })
                 .distinctUntilChanged();
     }
 

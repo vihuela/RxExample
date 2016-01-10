@@ -53,6 +53,10 @@ import ooo.oxo.mr.rx.RxList;
 import ooo.oxo.mr.rx.RxNetworking;
 import rx.Observable;
 import rx.android.schedulers.AndroidSchedulers;
+import rx.functions.Action0;
+import rx.functions.Action1;
+import rx.functions.Func0;
+import rx.functions.Func1;
 import rx.schedulers.Schedulers;
 
 public class MainActivity extends RxAppCompatActivity implements MainAdapter.Listener {
@@ -121,31 +125,54 @@ public class MainActivity extends RxAppCompatActivity implements MainAdapter.Lis
                 RxNetworking.bindRefreshing(binding.refresher);
 
         observableLoadLatest = Observable
-                .defer(() -> images.isEmpty()
-                        ? imageApi.latest(null)
-                        : imageApi.since(null, images.get(0).getUTCCreatedAt()))
-                .doOnUnsubscribe(() -> Log.d("RxJava", "unsubscribe load latest"))
-                .map(images -> {
-                    // for a strange bug of pg sql
-                    if (!images.isEmpty() && images.get(images.size() - 1).equals(images.get(0))) {
-                        images.remove(images.size() - 1);
+                .defer(new Func0<Observable<List<Image>>>() {
+                    @Override public Observable<List<Image>> call() {
+                        Observable<List<Image>> listObservable = images.isEmpty()
+                                ? imageApi.latest(null)
+                                : imageApi.since(null, images.get(0).getUTCCreatedAt());
+                        return listObservable;
                     }
+                })
+                .doOnUnsubscribe(new Action0() {
+                    @Override public void call() {
+                        Log.d("RxJava", "unsubscribe load latest");
+                    }
+                })
+                .map(new Func1<List<Image>, List<Image>>() {
+                    @Override public List<Image> call(List<Image> images) {
+                        // for a strange bug of pg sql
+                        if (!images.isEmpty() && images.get(images.size() - 1).equals(images.get(0))) {
+                            images.remove(images.size() - 1);
+                        }
 
-                    return images;
+                        return images;
+                    }
                 })
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .compose(networkingIndicator);
 
         observableLoadBefore = Observable
-                .defer(() -> imageApi.before(null, images.get(images.size() - 1).getUTCCreatedAt()))
-                .doOnUnsubscribe(() -> Log.d("RxJava", "unsubscribe load before"))
+                .defer(new Func0<Observable<List<Image>>>() {
+                    @Override public Observable<List<Image>> call() {
+                        return imageApi.before(null, images.get(images.size() - 1).getUTCCreatedAt());
+                    }
+                })
+                .doOnUnsubscribe(new Action0() {
+                    @Override public void call() {
+                        Log.d("RxJava", "unsubscribe load before");
+                    }
+                })
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .compose(networkingIndicator);
 
         observableCheckUpdate = versionApi.check()
-                .doOnUnsubscribe(() -> Log.d("RxJava", "unsubscribe check update"))
+                .doOnUnsubscribe(new Action0() {
+                    @Override public void call() {
+                        Log.d("RxJava", "unsubscribe check update");
+                    }
+                })
                 .filter(version -> version.versionCode > BuildConfig.VERSION_CODE)
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread());
@@ -153,10 +180,22 @@ public class MainActivity extends RxAppCompatActivity implements MainAdapter.Lis
 
     private void attachObservables() {
         RxEndlessRecyclerView.reachesEnd(binding.content)
-                .doOnUnsubscribe(() -> Log.d("RxJava", "unsubscribe recycler view"))
-                .flatMap(avoid -> observableLoadBefore)
+                .doOnUnsubscribe(new Action0() {
+                    @Override public void call() {
+                        Log.d("RxJava", "unsubscribe recycler view");
+                    }
+                })
+                .flatMap(new Func1<Integer, Observable<? extends List<Image>>>() {
+                    @Override public Observable<? extends List<Image>> call(Integer avoid) {
+                        return observableLoadBefore;
+                    }
+                })
                 .compose(bindToLifecycle())
-                .subscribe(RxList.appendTo(images), this::showError);
+                .subscribe(RxList.appendTo(images), new Action1<Throwable>() {
+                    @Override public void call(Throwable error1) {
+                        MainActivity.this.showError(error1);
+                    }
+                });
 
         RxSwipeRefreshLayout.refreshes(binding.refresher)
                 .doOnUnsubscribe(() -> Log.d("RxJava", "unsubscribe swipe refresh layout"))

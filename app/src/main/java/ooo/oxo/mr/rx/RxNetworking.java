@@ -21,13 +21,34 @@ package ooo.oxo.mr.rx;
 import android.support.v4.widget.SwipeRefreshLayout;
 
 import rx.Observable;
+import rx.functions.Action0;
 
 public class RxNetworking {
 
     public static <T> Observable.Transformer<T, T> bindRefreshing(SwipeRefreshLayout indicator) {
-        return observable -> observable
-                .doOnSubscribe(() -> indicator.post(() -> indicator.setRefreshing(true)))
-                .doOnCompleted(() -> indicator.post(() -> indicator.setRefreshing(false)));
+        return new Observable.Transformer<T, T>() {
+            @Override public Observable<T> call(Observable<T> observable) {
+                return observable
+                        .doOnSubscribe(new Action0() {
+                            @Override public void call() {
+                                indicator.post(new Runnable() {
+                                    @Override public void run() {
+                                        indicator.setRefreshing(true);
+                                    }
+                                });
+                            }
+                        })
+                        .doOnCompleted(new Action0() {
+                            @Override public void call() {
+                                indicator.post(new Runnable() {
+                                    @Override public void run() {
+                                        indicator.setRefreshing(false);
+                                    }
+                                });
+                            }
+                        });
+            }
+        };
     }
 
 }
